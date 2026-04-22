@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Smooth AI Object Detector - Real-time Detection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 15px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            font-size: clamp(1.5rem, 5vw, 2.2rem);
+            margin-bottom: 5px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .header p {
+            font-size: clamp(0.9rem, 3vw, 1.1rem);
+            opacity: 0.95;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 20px;
+        }
+
+        @media (max-width: 968px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+        }
+
+        .camera-section {
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            aspect-ratio: 16/9;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transform: scaleX(-1);
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            pointer-events: none;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        button:active {
+            transform: scale(0.96);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-info {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .results-section {
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            backdrop-filter: blur(10px);
+            max-height: 80vh;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+        }
+
+        .results-section::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .results-section::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .results-section::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 10px;
+        }
+
+        .status {
+            background: rgba(255,255,255,0.9);
+            padding: 12px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: 500;
+            backdrop-filter: blur(5px);
+            transition: all 0.3s ease;
+        }
+
+        .status.loading {
+            background: linear-gradient(135deg, #667eea20 0%, #764ba220 100%);
+            color: #667eea;
+            animation: pulse 1.5s ease infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .detected-list {
+            margin-bottom: 20px;
+        }
+
+        .detected-list h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .objects-grid {
+            display: grid;
+            gap: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .object-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: slideIn 0.3s ease;
+            transform-origin: left;
+        }
+
+        .object-card:hover {
+            transform: translateX(5px) scale(1.02);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+        }
+
+        .object-card:active {
+            transform: scale(0.98);
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .object-name {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .object-confidence {
+            font-size: 0.85rem;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .confidence-bar {
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-radius: 3px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-high {
+            background: #28a745;
+            color: white;
+        }
+
+        .badge-medium {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .badge-low {
+            background: #dc3545;
+            color: white;
+        }
+
+        .details-box {
+            background: rgba(248, 249, 250, 0.95);
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s ease;
+        }
+
+        .details-box h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .speech-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .speech-controls button {
+            flex: 1;
+            padding: 8px;
+            font-size: 0.9rem;
+        }
+
+        .fps-counter {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0,0,0,0.7);
+            color: #0f0;
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+        }
+
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 5px rgba(102, 126, 234, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(102, 126, 234, 0.8); }
+        }
+
+        .detecting-active {
+            animation: glow 1s ease infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>✨ Smooth AI Object Detector</h1>
+            <p>Real-time detection • Smooth animations • Voice feedback</p>
+        </div>
+
+        <div class="main-grid">
+            <div class="camera-section">
+                <div class="video-container" id="videoContainer">
+                    <video id="video" autoplay playsinline muted></video>
+                    <canvas id="canvas"></canvas>
+                    <div class="fps-counter" id="fpsCounter">FPS: 0</div>
+                </div>
+                
+                <div class="controls">
+                    <button id="startBtn" class="btn-primary">🎥 Start</button>
+                    <button id="autoDetectBtn" class="btn-primary" disabled>🔄 Auto OFF</button>
+                    <button id="speakBtn" class="btn-info" disabled>🔊 Describe</button>
+                    <button id="stopBtn" class="btn-danger">⏹️ Stop</button>
+                </div>
+                
+                <div id="status" class="status">🎯 Ready! Click "Start" to begin</div>
+            </div>
+
+            <div class="results-section">
+                <div class="detected-list">
+                    <h3>🎯 Detected Objects <span id="objectCount">(0)</span></h3>
+                    <div class="objects-grid" id="detectedObjects">
+                        <div style="text-align: center; color: #999; padding: 40px 20px;">
+                            No objects detected yet<br>
+                            Point your camera at anything!
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="details-box" id="detailsBox">
+                    <h4>📚 Information</h4>
+                    <div id="objectDetails">
+                        Click on any detected object to learn more
+                    </div>
+                    <div class="speech-controls">
+                        <button id="speakDetailsBtn" class="btn-info" disabled>🔊 Speak</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+    
+    <script>
+        // Performance optimized variables
+        let model = null;
+        let stream = null;
+        let isDetecting = false;
+        let animationId = null;
+        let currentPredictions = [];
+        let autoDetect = false;
+        let selectedObject = null;
+        let lastDetectionTime = 0;
+        let frameCount = 0;
+        let lastFpsUpdate = 0;
+        let detectionInterval = 150; // ms between detections for smoothness
+        let isModelLoading = true;
+        
+        // DOM elements
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const autoDetectBtn = document.getElementById('autoDetectBtn');
+        const speakBtn = document.getElementById('speakBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const speakDetailsBtn = document.getElementById('speakDetailsBtn');
+        const statusDiv = document.getElementById('status');
+        const detectedObjectsDiv = document.getElementById('detectedObjects');
+        const objectDetailsDiv = document.getElementById('objectDetails');
+        const objectCountSpan = document.getElementById('objectCount');
+        const fpsCounter = document.getElementById('fpsCounter');
+        
+        // Enhanced knowledge base
+        const knowledgeBase = {
+            'person': 'A human being - the most intelligent species on Earth, capable of complex reasoning, language, and creativity.',
+            'cat': 'A small domesticated carnivorous mammal. Cats are agile, have excellent night vision, and are popular pets worldwide.',
+            'dog': 'Man\'s best friend - a loyal domesticated mammal known for companionship, protection, and service to humans.',
+            'bird': 'A feathered vertebrate animal with wings. Most birds can fly, and they communicate through beautiful songs.',
+            'car': 'A wheeled motor vehicle for transportation. Modern cars provide comfort, speed, and convenience for travel.',
+            'bicycle': 'An eco-friendly human-powered vehicle with two wheels. Great for exercise and short-distance travel.',
+            'laptop': 'A portable personal computer. Modern laptops are powerful enough for work, entertainment, and creativity anywhere.',
+            'cell phone': 'A mobile communication device. Smartphones are essentially pocket-sized computers with countless capabilities.',
+            'chair': 'A seat designed for one person. Chairs provide comfort and support for sitting activities.',
+            'book': 'A collection of written or printed pages bound together. Books are portals to knowledge and imagination.',
+        };
+        
+        // Get description with fallback
+        function getDescription(objectName) {
+            const key = objectName.toLowerCase();
+            if (knowledgeBase[key]) return knowledgeBase[key];
+            
+            const descriptions = {
+                'default': `A ${objectName} - an interesting object! Every object has unique characteristics and purposes in our world.`,
+            };
+            return descriptions.default;
+        }
+        
+        // Load model with progress indicator
+        async function loadModel() {
+            isModelLoading = true;
+            statusDiv.innerHTML = '🔄 Loading AI model... Please wait';
+            statusDiv.className = 'status loading';
+            
+            try {
+                // Use a promise with timeout to prevent freezing
+                const loadPromise = cocoSsd.load({
+                    base: 'mobilenet_v2',
+                    modelUrl: undefined
+                });
+                
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Loading timeout')), 30000)
+                );
+                
+                model = await Promise.race([loadPromise, timeoutPromise]);
+                isModelLoading = false;
+                statusDiv.innerHTML = '✅ AI ready! Click "Start" to begin detection';
+                statusDiv.className = 'status success';
+                startBtn.disabled = false;
+            } catch (error) {
+                isModelLoading = false;
+                statusDiv.innerHTML = '❌ Model load failed. Refresh to try again.';
+                console.error(error);
+            }
+        }
+        
+        // Start camera with optimal settings
+        async function startCamera() {
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        frameRate: { ideal: 30 }
+                    }
+                };
+                
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                await new Promise((resolve) => {
+                    video.onloadedmetadata = () => {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        resolve();
+                    };
+                });
+                
+                await video.play();
+                
+                statusDiv.innerHTML = '✅ Camera active! Detection running smoothly';
+                statusDiv.className = 'status success';
+                autoDetectBtn.disabled = false;
+                speakBtn.disabled = false;
+                startBtn.disabled = true;
+                
+                // Start detection loop
+                startDetectionLoop();
+                
+            } catch (error) {
+                statusDiv.innerHTML = '❌ Camera error: ' + error.message;
+                console.error(error);
+            }
+        }
+        
+        // Optimized detection loop with throttling
+        function startDetectionLoop() {
+            if (isDetecting) return;
+            isDetecting = true;
+            
+            function detectLoop() {
+                if (!isDetecting || !model || !video.videoWidth) {
+                    if (isDetecting) animationId = requestAnimationFrame(detectLoop);
+                    return;
+                }
+                
+                const now = performance.now();
+                
+                // Throttle detection for performance
+                if (now - lastDetectionTime >= detectionInterval) {
+                    performDetection();
+                    lastDetectionTime = now;
+                }
+                
+                // Update FPS counter
+                frameCount++;
+                if (now - lastFpsUpdate >= 1000) {
+                    fpsCounter.textContent = `FPS: ${frameCount}`;
+                    frameCount = 0;
+                    lastFpsUpdate = now;
+                }
+                
+                animationId = requestAnimationFrame(detectLoop);
+            }
+            
+            detectLoop();
+        }
+        
+        // Perform detection and drawing
+        async function performDetection() {
+            if (!model || !video.videoWidth || isModelLoading) return;
+            
+            try {
+                const predictions = await model.detect(video);
+                currentPredictions = predictions;
+                
+                // Draw on canvas (smooth drawing)
+                drawPredictionsOptimized(predictions);
+                
+                // Update UI with predictions
+                updateDetectedObjectsUI(predictions);
+                
+            } catch (error) {
+                console.error('Detection error:', error);
+            }
+        }
+        
+        // Optimized drawing function
+        function drawPredictionsOptimized(predictions) {
+            if (!ctx) return;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            if (!predictions.length) return;
+            
+            // Batch drawing operations for performance
+            ctx.save();
+            ctx.globalAlpha = 0.9;
+            
+            predictions.forEach((prediction, idx) => {
+                const [x, y, width, height] = prediction.bbox;
+                const confidence = Math.round(prediction.score * 100);
+                const hue = (idx * 37) % 360;
+                const color = `hsl(${hue}, 70%, 50%)`;
+                
+                // Draw box
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(x, y, width, height);
+                
+                // Draw label background
+                ctx.fillStyle = color;
+                ctx.fillRect(x, y - 25, Math.min(width, 150), 25);
+                
+                // Draw text
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+                ctx.fillText(`${prediction.class} ${confidence}%`, x + 5, y - 7);
+            });
+            
+            ctx.restore();
+        }
+        
+        // Smooth UI update
+        function updateDetectedObjectsUI(predictions) {
+            if (!predictions.length) {
+                detectedObjectsDiv.innerHTML = `
+                    <div style="text-align: center; color: #999; padding: 40px 20px;">
+                        🔍 No objects detected<br>
+                        <span style="font-size: 0.9rem;">Try different lighting or angle</span>
+                    </div>
+                `;
+                objectCountSpan.textContent = '(0)';
+                return;
+            }
+            
+            // Group by object type
+            const objectMap = new Map();
+            predictions.forEach(pred => {
+                const existing = objectMap.get(pred.class);
+                if (existing) {
+                    existing.push(pred.score);
+                } else {
+                    objectMap.set(pred.class, [pred.score]);
+                }
+            });
+            
+            const uniqueObjects = Array.from(objectMap.entries()).map(([name, scores]) => ({
+                name: name,
+                confidence: scores.reduce((a, b) => a + b, 0) / scores.length
+            })).sort((a, b) => b.confidence - a.confidence);
+            
+            objectCountSpan.textContent = `(${uniqueObjects.length})`;
+            
+            // Use DocumentFragment for better performance
+            const fragment = document.createDocumentFragment();
+            
+            uniqueObjects.forEach(obj => {
+                const confidencePercent = Math.round(obj.confidence * 100);
+                let badgeClass = 'badge-low';
+                if (confidencePercent > 70) badgeClass = 'badge-high';
+                else if (confidencePercent > 40) badgeClass = 'badge-medium';
+                
+                const emoji = getEmoji(obj.name);
+                
+                const card = document.createElement('div');
+                card.className = 'object-card';
+                card.onclick = () => selectObject(obj.name);
+                card.innerHTML = `
+                    <div class="object-name">
+                        <span>${emoji} ${obj.name}</span>
+                        <span class="badge ${badgeClass}">${confidencePercent}%</span>
+                    </div>
+                    <div class="object-confidence">Confidence</div>
+                    <div class="confidence-bar">
+                        <div class="confidence-fill" style="width: ${confidencePercent}%"></div>
+                    </div>
+                `;
+                fragment.appendChild(card);
+            });
+            
+            detectedObjectsDiv.innerHTML = '';
+            detectedObjectsDiv.appendChild(fragment);
+        }
+        
+        // Get emoji for object
+        function getEmoji(objectName) {
+            const emojiMap = {
+                'person': '👤', 'cat': '🐱', 'dog': '🐶', 'bird': '🐦', 'car': '🚗',
+                'bicycle': '🚲', 'motorcycle': '🏍️', 'bus': '🚌', 'truck': '🚚',
+                'laptop': '💻', 'cell phone': '📱', 'tv': '📺', 'chair': '🪑',
+                'book': '📖', 'apple': '🍎', 'banana': '🍌', 'pizza': '🍕'
+            };
+            return emojiMap[objectName.toLowerCase()] || '🔍';
+        }
+        
+        // Select object and show details
+        window.selectObject = function(objectName) {
+            selectedObject = objectName;
+            const description = getDescription(objectName);
+            objectDetailsDiv.innerHTML = `
+                <strong style="font-size: 1.1rem; color: #667eea;">${getEmoji(objectName)} ${objectName}</strong><br><br>
+                ${description}<br><br>
+                <span style="font-size: 0.85rem; color: #666;">💡 Click "Speak" to hear this description</span>
+            `;
+            speakDetailsBtn.disabled = false;
+            
+            // Smooth scroll to details
+            document.getElementById('detailsBox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        };
+        
+        // Speak object description
+        function speakObjectDescription(objectName) {
+            const description = getDescription(objectName);
+            speakText(`I see a ${objectName}. ${description}`);
+        }
+        
+        // Speak all detected objects
+        function speakAllObjects() {
+            if (!currentPredictions.length) {
+                speakText("I don't see any objects right now. Please show me something!");
+                return;
+            }
+            
+            const uniqueNames = [...new Set(currentPredictions.map(p => p.class))];
+            let message = `I can see ${uniqueNames.length} object${uniqueNames.length > 1 ? 's' : ''}. `;
+            
+            if (uniqueNames.length === 1) {
+                message += `There is a ${uniqueNames[0]}. ${getDescription(uniqueNames[0])}`;
+            } else if (uniqueNames.length <= 3) {
+                message += `I see ${uniqueNames.join(', ')}. `;
+                message += getDescription(uniqueNames[0]);
+            } else {
+                message += `I see ${uniqueNames.slice(0, 3).join(', ')}, and ${uniqueNames.length - 3} more. `;
+                message += getDescription(uniqueNames[0]);
+            }
+            
+            speakText(message);
+        }
+        
+        // Text to speech with smooth playback
+        function speakText(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 0.9;
+                utterance.pitch = 1;
+                utterance.volume = 1;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+        
+        // Toggle auto detection
+        function toggleAutoDetect() {
+            autoDetect = !autoDetect;
+            if (autoDetect) {
+                autoDetectBtn.innerHTML = '🔴 Auto ON';
+                autoDetectBtn.className = 'btn-success';
+                detectionInterval = 100; // Faster detection when auto mode
+                statusDiv.innerHTML = '🔄 Auto-detect ON - I will continuously analyze';
+            } else {
+                autoDetectBtn.innerHTML = '🔄 Auto OFF';
+                autoDetectBtn.className = 'btn-primary';
+                detectionInterval = 150;
+                statusDiv.innerHTML = '⏸️ Auto-detect OFF - Manual mode';
+            }
+            
+            // Visual feedback
+            const container = document.getElementById('videoContainer');
+            if (autoDetect) {
+                container.classList.add('detecting-active');
+            } else {
+                container.classList.remove('detecting-active');
+            }
+        }
+        
+        // Auto-speak when objects detected (if auto mode)
+        let lastSpokenTime = 0;
+        setInterval(() => {
+            if (autoDetect && currentPredictions.length > 0 && Date.now() - lastSpokenTime > 5000) {
+                speakAllObjects();
+                lastSpokenTime = Date.now();
+            }
+        }, 1000);
+        
+        // Stop everything
+        function stopCamera() {
+            isDetecting = false;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            video.srcObject = null;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            statusDiv.innerHTML = '⏹️ Stopped. Click "Start" to begin again';
+            statusDiv.className = 'status';
+            autoDetectBtn.disabled = true;
+            speakBtn.disabled = true;
+            startBtn.disabled = false;
+            autoDetect = false;
+            autoDetectBtn.innerHTML = '🔄 Auto OFF';
+            autoDetectBtn.className = 'btn-primary';
+            currentPredictions = [];
+            
+            detectedObjectsDiv.innerHTML = `
+                <div style="text-align: center; color: #999; padding: 40px 20px;">
+                    Camera stopped<br>
+                    Click "Start" to begin
+                </div>
+            `;
+            objectCountSpan.textContent = '(0)';
+            
+            const container = document.getElementById('videoContainer');
+            container.classList.remove('detecting-active');
+        }
+        
+        // Event listeners
+        startBtn.addEventListener('click', startCamera);
+        autoDetectBtn.addEventListener('click', toggleAutoDetect);
+        speakBtn.addEventListener('click', speakAllObjects);
+        stopBtn.addEventListener('click', stopCamera);
+        speakDetailsBtn.addEventListener('click', () => {
+            if (selectedObject) {
+                speakObjectDescription(selectedObject);
+            } else {
+                speakText("Please select an object from the list first");
+            }
+        });
+        
+        // Initialize
+        loadModel();
+        
+        // Cleanup
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            window.speechSynthesis.cancel();
+        });
+    </script>
+</body>
+</html>
